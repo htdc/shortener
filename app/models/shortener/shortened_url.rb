@@ -20,6 +20,19 @@ class Shortener::ShortenedUrl < ActiveRecord::Base
     URI.parse(url).normalize.to_s
   end
 
+  # Makes short urls without saving them yet.
+  def self.generate_without_save(destination_url, owner: nil)
+    scope = owner ? owner.shortened_urls : self
+    result = scope.where(url: clean_url(destination_url)).build(expires_at: nil)
+
+    count = 0
+    begin
+      count += 1
+      raise "We never found a unique key... Why? #{result.unique_key} not unique" if count == 7
+      result.unique_key = Shortener::ShortenedUrl.new.send(:generate_unique_key)
+    end while Shortener::ShortenedUrl.exists?(unique_key: result.unique_key)
+  end
+
   # generate a shortened link from a url
   # link to a user if one specified
   # throw an exception if anything goes wrong
@@ -81,11 +94,11 @@ class Shortener::ShortenedUrl < ActiveRecord::Base
   define_method CREATE_METHOD_NAME do
     count = 0
     begin
-      self.unique_key = generate_unique_key
       super()
     rescue ActiveRecord::RecordNotUnique, ActiveRecord::StatementInvalid => err
       if (count +=1) < 5
         logger.info("retrying with different unique key")
+        self.unique_key = generate_unique_key
         retry
       else
         logger.info("too many retries, giving up")
