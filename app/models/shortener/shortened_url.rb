@@ -95,7 +95,7 @@ class Shortener::ShortenedUrl < ActiveRecord::Base
   define_method CREATE_METHOD_NAME do
     count = 0
     begin
-      self.unique_key = generate_unique_key if unique_key.empty?
+      self.unique_key = generate_unique_key if unique_key.blank?
       super()
     rescue ActiveRecord::RecordNotUnique, ActiveRecord::StatementInvalid => err
       if (count +=1) < 5
