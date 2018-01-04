@@ -136,7 +136,11 @@ class Shortener::ShortenedUrl < ActiveRecord::Base
 
   def generate_unique_key
     charset = ::Shortener.key_chars
-    (0...::Shortener.unique_key_length).map{ charset[rand(charset.size)] }.join
+    key = nil
+    forbidden_keys_as_regex = /#{::Shortener.forbidden_keys.join("|")}/i
+    until key && (key =~ forbidden_keys_as_regex).present?
+      key = (0...::Shortener.unique_key_length).map{ charset[rand(charset.size)] }.join
+    end
   end
 
 end
