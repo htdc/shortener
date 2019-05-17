@@ -18,7 +18,7 @@ class Shortener::ShortenedUrlsController < ActionController::Base
         ActiveRecord::Base.connection.close
       end
 
-      params.except! *[:id, :action, :controller]
+      params.to_h.except! *[:id, :action, :controller]
       url = sl.url
 
       if params.present?
