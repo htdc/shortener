@@ -18,13 +18,13 @@ class Shortener::ShortenedUrlsController < ActionController::Base
         ActiveRecord::Base.connection.close
       end
 
-      params.except! *[:id, :action, :controller]
+      filtered_params = params.except *[:id, :action, :controller]
       url = sl.url
 
-      if params.present?
+      if filtered_params.present?
         uri = URI.parse(sl.url)
         existing_params = Rack::Utils.parse_nested_query(uri.query)
-        merged_params   = existing_params.merge(params)
+        merged_params   = existing_params.merge(filtered_params)
         uri.query       = merged_params.to_query
         url             = uri.to_s
       end
