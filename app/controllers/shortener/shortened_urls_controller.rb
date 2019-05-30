@@ -13,10 +13,7 @@ class Shortener::ShortenedUrlsController < ActionController::Base
       # this is the place to enhance the metrics captured
       # for the system. You could log the request origin
       # browser type, ip address etc.
-      Thread.new do
-        sl.increment!(:use_count)
-        ActiveRecord::Base.connection.close
-      end
+      sl.increment!(:use_count)
 
       filtered_params = params.except *[:id, :action, :controller]
       url = sl.url
