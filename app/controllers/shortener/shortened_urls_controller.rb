@@ -15,7 +15,7 @@ class Shortener::ShortenedUrlsController < ActionController::Base
       # browser type, ip address etc.
       sl.increment!(:use_count)
 
-      filtered_params = params.except *[:id, :action, :controller]
+      filtered_params = params.permit!.to_h.except *[:id, :action, :controller]
       url = sl.url
 
       if filtered_params.present?
