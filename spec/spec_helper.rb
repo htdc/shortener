@@ -18,4 +18,11 @@ Shoulda::Matchers.configure do |config|
 end
 
 # Run any available migration
-ActiveRecord::Migrator.migrate File.expand_path("../dummy/db/migrate/", __FILE__)
+migration_path = File.expand_path("../dummy/db/migrate/", __FILE__)
+if ActiveRecord::Migrator.respond_to?(:migrate)
+  ActiveRecord::Migrator.migrate(migration_path)
+elsif Rails::VERSION::MAJOR < 6
+  ActiveRecord::MigrationContext.new(migration_path).migrate
+else
+  ActiveRecord::MigrationContext.new(migration_path, ActiveRecord::Base.connection.schema_migration).migrate
+end

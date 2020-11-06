@@ -8,7 +8,7 @@ describe Shortener::ShortenedUrlsController, type: :controller do
   describe '#show' do
     let(:params) { {} }
     before do
-      get :show, { id: key }.merge(params)
+      get :show, params: { id: key }.merge(params)
     end
 
     context 'valid keys' do
@@ -77,7 +77,7 @@ describe Shortener::ShortenedUrlsController, type: :controller do
         before do
           Shortener.default_redirect = 'http://www.default_redirect.com'
           # call again for the get is done with the setting
-          get :show, id: key
+          get :show, params: { id: key }
         end
 
         context 'non existant key' do

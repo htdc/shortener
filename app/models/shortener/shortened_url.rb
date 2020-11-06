@@ -4,8 +4,10 @@ class Shortener::ShortenedUrl < ActiveRecord::Base
 
   validates :url, presence: true
 
+  around_create :generate_unique_key
+
   # allows the shortened link to be associated with a user
-  belongs_to :owner, polymorphic: true
+  belongs_to :owner, polymorphic: true, optional: true
 
   # exclude records in which expiration time is set and expiration time is greater than current time
   scope :unexpired, -> { where(arel_table[:expires_at].eq(nil).or(arel_table[:expires_at].gt(::Time.current.to_s(:db)))) }
@@ -79,11 +81,14 @@ class Shortener::ShortenedUrl < ActiveRecord::Base
 
   def self.merge_params_to_url(url: nil, params: {})
     params.try(:except!, *[:id, :action, :controller])
+    if params.respond_to?(:permit!)
+      params = params.permit!.to_h.with_indifferent_access.except!(:id, :action, :controller)
+    end
 
     if params.present?
       uri = URI.parse(url)
       existing_params = Rack::Utils.parse_nested_query(uri.query)
-      uri.query       = existing_params.symbolize_keys.merge(params).to_query
+      uri.query       = existing_params.with_indifferent_access.merge(params).to_query
       url = uri.to_s
     end
 
@@ -98,45 +103,32 @@ class Shortener::ShortenedUrl < ActiveRecord::Base
     end
   end
 
+  def to_param
+    unique_key
+  end
+
   private
 
-  # the create method changed in rails 4...
-  CREATE_METHOD_NAME =
-    if Rails::VERSION::MAJOR >= 4
-      # And again in 4.0.6/4.1.2
-      if ((Rails::VERSION::MINOR == 0) && (Rails::VERSION::TINY < 6)) ||
-         ((Rails::VERSION::MINOR == 1) && (Rails::VERSION::TINY < 2))
-        "create_record"
-      else
-        "_create_record"
-      end
-  else
-    "create"
-  end
 
-  # we'll rely on the DB to make sure the unique key is really unique.
-  # if it isn't unique, the unique index will catch this and raise an error
-  define_method CREATE_METHOD_NAME do
-    count = 0
-    begin
-      self.unique_key = custom_key || generate_unique_key
-      super()
-    rescue ActiveRecord::RecordNotUnique, ActiveRecord::StatementInvalid => err
-      logger.info("Failed to generate ShortenedUrl with unique_key: #{unique_key}")
-      self.unique_key = nil
-      if (count +=1) < 5
-        logger.info("retrying with different unique key")
-        retry
-      else
-        logger.info("too many retries, giving up")
-        raise
-      end
-    end
-  end
-
-  def generate_unique_key
+  def self.unique_key_candidate
     charset = ::Shortener.key_chars
     (0...::Shortener.unique_key_length).map{ charset[rand(charset.size)] }.join
+  end
+
+  def generate_unique_key(retries = 5)
+    begin
+      self.unique_key = custom_key || self.class.unique_key_candidate
+      self.custom_key = nil
+    end while self.class.unscoped.exists?(unique_key: unique_key)
+
+    yield
+  rescue ActiveRecord::RecordNotUnique
+    if retries <= 0
+      raise
+    else
+      retries -= 1
+      retry
+    end
   end
 
 end
