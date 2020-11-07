@@ -114,6 +114,13 @@ describe Shortener::ShortenedUrl, type: :model do
           expect(short_url.unique_key).to eq "ABCDEF"
         end
       end
+      context "duplicate unique key explicitly specified" do
+        it 'should not retry' do
+          expect do
+            Shortener::ShortenedUrl.generate!(Faker::Internet.url, custom_key: existing_shortened_url.unique_key)
+          end.to raise_exception ActiveRecord::RecordNotUnique
+        end
+      end
     end
 
     context "existing shortened URL with relative path" do

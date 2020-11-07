@@ -4,8 +4,10 @@ class Shortener::ShortenedUrl < ActiveRecord::Base
 
   validates :url, presence: true
 
+  around_create :set_unique_key_with_retries!
+
   # allows the shortened link to be associated with a user
-  belongs_to :owner, polymorphic: true
+  belongs_to :owner, polymorphic: true, optional: true
 
   # exclude records in which expiration time is set and expiration time is greater than current time
   scope :unexpired, -> { where(arel_table[:expires_at].eq(nil).or(arel_table[:expires_at].gt(::Time.current.to_s(:db)))) }
@@ -76,42 +78,32 @@ class Shortener::ShortenedUrl < ActiveRecord::Base
 
   private
 
-  # the create method changed in rails 4...
-  CREATE_METHOD_NAME =
-    if Rails::VERSION::MAJOR >= 4
-      # And again in 4.0.6/4.1.2
-      if ((Rails::VERSION::MINOR == 0) && (Rails::VERSION::TINY < 6)) ||
-         ((Rails::VERSION::MINOR == 1) && (Rails::VERSION::TINY < 2))
-        "create_record"
-      else
-        "_create_record"
-      end
-  else
-    "create"
-  end
-
   # we'll rely on the DB to make sure the unique key is really unique.
   # if it isn't unique, the unique index will catch this and raise an error
-  define_method CREATE_METHOD_NAME do
-    count = 0
+  def set_unique_key_with_retries!
+    # Don't retry if we've picked a unique key, as we expect to get that key.
+    retries = unique_key.blank? ? 5 : 0
+
     begin
       self.unique_key = generate_unique_key if unique_key.blank?
-      super()
-    rescue ActiveRecord::RecordNotUnique, ActiveRecord::StatementInvalid => err
-      if (count +=1) < 5
-        logger.info("retrying with different unique key")
-        retry
-      else
+    end
+      yield # As in continue to 'create', as this is called from around_create
+    rescue ActiveRecord::RecordNotUnique
+      if retries <= 0
         logger.info("too many retries, giving up")
         raise
+      else
+        logger.info("retrying with different unique key")
+        retries -= 1
+        self.unique_key = nil
+        retry
       end
-    end
   end
 
   def generate_unique_key
     charset = ::Shortener.key_chars
     key = nil
-    forbidden_keys_as_regex = /#{::Shortener.forbidden_keys.join("|")}/i
+    forbidden_keys_as_regex = Shortener.forbidden_keys.blank? ? nil : /#{::Shortener.forbidden_keys.join("|")}/i
     until key && (key =~ forbidden_keys_as_regex).nil?
       key = (0...::Shortener.unique_key_length).map{ charset[rand(charset.size)] }.join
     end
